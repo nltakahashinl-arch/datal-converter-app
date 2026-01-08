@@ -1,17 +1,19 @@
 import streamlit as st
 import pandas as pd
+import io
 
 # --- 1. アプリの設定と初期化 ---
 st.set_page_config(page_title="データ変換アプリ(B2風)", layout="wide")
 
 # セッション状態の初期化
 if 'saved_rules' not in st.session_state:
+    # ★修正: 50行分の空枠を作成
     initial_df = pd.DataFrame({
-        "No": range(1, 16),
-        "項目名": [f"項目{i}" for i in range(1, 16)],
-        "元列": [""] * 15,
-        "処理": ["そのまま"] * 15,
-        "引数1": [""] * 15
+        "No": range(1, 51),
+        "項目名": [f"項目{i}" for i in range(1, 51)],
+        "元列": [""] * 50,
+        "処理": ["そのまま"] * 50,
+        "引数1": [""] * 50
     })
     st.session_state['saved_rules'] = {"新規設定": initial_df}
 
@@ -25,6 +27,7 @@ def apply_rule(df_source, rule_df):
         action = row['処理']
         arg1 = row['引数1']
         
+        # 項目名が空ならスキップ
         if not target_col_name:
             continue
 
@@ -56,14 +59,12 @@ def apply_rule(df_source, rule_df):
 
     return pd.DataFrame(result_data)
 
-# --- CSV読み込み用の関数（文字コード自動判別） ---
+# --- CSV読み込み用の関数 ---
 def read_csv_safe(file):
     try:
-        # まずUTF-8で試す
         return pd.read_csv(file)
     except UnicodeDecodeError:
-        # ダメならShift-JIS (CP932) で試す（Excelや日本語システム用）
-        file.seek(0) # ファイルの先頭に戻る
+        file.seek(0)
         return pd.read_csv(file, encoding='cp932')
 
 # --- 3. メイン画面 ---
@@ -93,8 +94,17 @@ if mode == "変換実行":
                 
                 st.success("変換完了！")
                 st.dataframe(df_result.head())
-                csv_data = df_result.to_csv(index=False, encoding='cp932', errors='ignore') # 出力もShift-JISに（Excelで開きやすく）
-                st.download_button("CSVダウンロード", csv_data, "converted.csv", "text/csv")
+                
+                # Excel用にBOM付きUTF-8にする
+                csv_str = df_result.to_csv(index=False)
+                csv_data = csv_str.encode('utf-8-sig')
+                
+                st.download_button(
+                    label="CSVでダウンロード",
+                    data=csv_data,
+                    file_name="converted_data.csv",
+                    mime="text/csv"
+                )
         except Exception as e:
             st.error(f"ファイル読み込みエラー: {e}")
 
@@ -111,12 +121,13 @@ elif mode == "型の管理・作成(B2モード)":
     if edit_mode == "新規作成":
         target_rule_name = st.text_input("新しい型名", "B社用設定")
         if target_rule_name not in st.session_state['saved_rules']:
+            # ★修正: ここも50行分作成
             st.session_state['saved_rules'][target_rule_name] = pd.DataFrame({
-                "No": range(1, 16),
-                "項目名": [f"項目{i}" for i in range(1, 16)],
-                "元列": [""] * 15,
-                "処理": ["そのまま"] * 15,
-                "引数1": [""] * 15
+                "No": range(1, 51),
+                "項目名": [f"項目{i}" for i in range(1, 51)],
+                "元列": [""] * 50,
+                "処理": ["そのまま"] * 50,
+                "引数1": [""] * 50
             })
     else:
         rule_list = list(st.session_state['saved_rules'].keys())
@@ -156,6 +167,7 @@ elif mode == "型の管理・作成(B2モード)":
     with col_left:
         st.markdown("**① 出力したい項目 (レイアウト)**")
         target_items = current_df["項目名"].tolist()
+        # 50項目あると長いので、スクロールして選んでください
         selected_target_index = st.radio("出力項目を選択", range(len(target_items)), format_func=lambda x: f"{x+1}. {target_items[x]}")
 
     with col_right:
